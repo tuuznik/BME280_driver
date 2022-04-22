@@ -106,7 +106,7 @@ static void bme280_calibrate_press(u32 press, struct bme280 *bme280){
 	tmp3 = 1048576 - (s32)press;
 	tmp3 = (((tmp3 << 31) - tmp2) * 3125);
 	//tmp4 = do_div(tmp3, tmp1);
-    tmp3 = do_div((u64)tmp3, (u64)tmp1);
+	tmp3 = div_s64(tmp3, tmp1);
 	tmp1 = (((s64)bme280->params.dig_P9) * (tmp3 >> 13) * (tmp3 >> 13)) >> 25;
 	tmp2 = (((s64)bme280->params.dig_P8) * tmp3) >> 19;
 	tmp3 = ((tmp3 + tmp1 + tmp2) >> 8) + (((s64)bme280->params.dig_P7) << 4);
@@ -120,6 +120,8 @@ static int bme280_read(struct bme280 *bme280){
     u32 pressure, temperature, humidity;
     u8 data_readout[8];
     
+    // Switch to force mode
+
     while(i < 8){
         tmp = i2c_smbus_read_byte_data(bme280->client, 0xF7 + i);
         data_readout[i] = (u8)(tmp & 0xFF);
@@ -209,7 +211,8 @@ static int get_compensation_params(struct bme280 *bme280){
     bme280->params.dig_P7 = (signed short)((buf[19] << 8) | buf[18]);
     bme280->params.dig_P8 = (signed short)((buf[21] << 8) | buf[20]);
     bme280->params.dig_P9 = (signed short)((buf[23] << 8) | buf[22]);
-        
+      
+    i = 0;
     while (i < 8){
         buf[i] = (u8)(i2c_smbus_read_byte_data(bme280->client, 0xE1 + i) & 0xFF);
         i++;
