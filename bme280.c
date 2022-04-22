@@ -4,7 +4,7 @@
 #include <linux/gpio.h> 
 #include <linux/i2c.h> 
 #include <asm/div64.h>
- 
+
 // static int __init bme280_init(void) { 
 //     pr_info("Hello world!\n"); 
 //     return 0; 
@@ -170,11 +170,9 @@ static ssize_t bme280_pressure_show(struct device *dev, struct device_attribute 
     bme280_read(bme280);
     pressure = bme280->measurements.press;
     return sprintf(buf, "%d\n", pressure);
-    
 }
 
 static DEVICE_ATTR(pressure,S_IRUSR,bme280_pressure_show,NULL);
-
 
 static const struct of_device_id bme280_of_match[] = { 
         { .compatible = "bosch,bme280" },
@@ -188,6 +186,7 @@ static struct i2c_device_id bme280_idtable[] = {
 }; 
  
 MODULE_DEVICE_TABLE(i2c, bme280_idtable); 
+
 
 static int get_compensation_params(struct bme280 *bme280){
     
@@ -227,6 +226,7 @@ static int get_compensation_params(struct bme280 *bme280){
     
     return 0;
 }
+
 
 static int bme280_probe(struct i2c_client *client, const struct i2c_device_id *id) {
     
