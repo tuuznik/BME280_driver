@@ -121,6 +121,14 @@ static int bme280_read(struct bme280 *bme280){
     u8 data_readout[8];
     
     // Switch to force mode
+    tmp = i2c_smbus_write_byte_data(bme280->client, 0xF4, 0x26);
+    if (tmp < 0){
+	return tmp;
+    }
+    tmp = i2c_smbus_write_byte_data(bme280->client, 0xF2, 0x1);
+    if (tmp < 0){
+	return tmp;
+    }
 
     while(i < 8){
         tmp = i2c_smbus_read_byte_data(bme280->client, 0xF7 + i);
