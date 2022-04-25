@@ -24,24 +24,24 @@ struct bme280_measurements {
 };
 
 struct bme280_compensation_params{
-	unsigned short dig_T1;
+    unsigned short dig_T1;
     signed short dig_T2;
-	signed short dig_T3;
-	unsigned short dig_P1;
-	signed short dig_P2;
-	signed short dig_P3;
-	signed short dig_P4;
-	signed short dig_P5;
-	signed short dig_P6;
-	signed short dig_P7;
-	signed short dig_P8;
-	signed short dig_P9;
-	unsigned char dig_H1;
-	signed short dig_H2;
-	unsigned char dig_H3;
-	signed short dig_H4;
-	signed short dig_H5;
-	signed char dig_H6;	
+    signed short dig_T3;
+    unsigned short dig_P1;
+    signed short dig_P2;
+    signed short dig_P3;
+    signed short dig_P4;
+    signed short dig_P5;
+    signed short dig_P6;
+    signed short dig_P7;
+    signed short dig_P8;
+    signed short dig_P9;
+    unsigned char dig_H1;
+    signed short dig_H2;
+    unsigned char dig_H3;
+    signed short dig_H4;
+    signed short dig_H5;
+    signed char dig_H6;	
 };
 
 struct bme280 { 
@@ -53,18 +53,21 @@ struct bme280 {
 }; 
 
 static s32 fine_t = 0;
+// 0 - forced, 1 - normal
+static bool normal_mode = 0;
+//static char mybuf[100] = "mydevice";
 
 
 static void bme280_calibrate_temp(u32 temp, struct bme280 *bme280){
 
-	s32 tmp1, tmp2;
+    s32 tmp1, tmp2;
 
-	tmp1 = ((((temp >> 3) - ((s32)bme280->params.dig_T1 << 1))) * 
-		((s32)bme280->params.dig_T2)) >> 11;
-	tmp2 = (((((temp >> 4) - ((s32)bme280->params.dig_T1)) * 
-		((temp >> 4) - ((s32)bme280->params.dig_T1))) >> 12) *
-		((s32)bme280->params.dig_T3)) >> 14;
-	fine_t = tmp1 + tmp2;
+    tmp1 = ((((temp >> 3) - ((s32)bme280->params.dig_T1 << 1))) * 
+	    ((s32)bme280->params.dig_T2)) >> 11;
+    tmp2 = (((((temp >> 4) - ((s32)bme280->params.dig_T1)) * 
+	    ((temp >> 4) - ((s32)bme280->params.dig_T1))) >> 12) *
+	    ((s32)bme280->params.dig_T3)) >> 14;
+    fine_t = tmp1 + tmp2;
 	
     bme280->measurements.temp = (fine_t * 5 + 128) >> 8; 
 }
@@ -74,43 +77,43 @@ static void bme280_calibrate_hum(u32 hum, struct bme280 *bme280){
     
     s32 tmp1;
 
-	tmp1 = (fine_t - ((s32)76800));
-	tmp1 = ((((hum << 14) - (((s32)bme280->params.dig_H4 << 20) -
-		(((s32)bme280->params.dig_H5) * tmp1)) +
-		((s32)16384)) >> 15) * (((((((tmp1 * ((s32)bme280->params.dig_H6)) >> 10) *
-		(((tmp1 * ((s32)bme280->params.dig_H3)) >> 11) + ((s32)32768))) >> 10) + 
-		((s32)2097152)) * ((s32)bme280->params.dig_H2) + 8192) >> 14));
-	tmp1 = (tmp1 - (((((tmp1 >> 15) * (tmp1 >> 15)) >> 7) *
-		(( s32)bme280->params.dig_H1)) >> 4));
-	tmp1 = (tmp1 < 0 ? 0 : tmp1);
-	tmp1 = (tmp1 > 419430400 ? 419430400 : tmp1);
-    
-	bme280->measurements.hum = (u32)(tmp1 >> 12);
+    tmp1 = (fine_t - ((s32)76800));
+    tmp1 = ((((hum << 14) - (((s32)bme280->params.dig_H4 << 20) -
+	    (((s32)bme280->params.dig_H5) * tmp1)) +
+	    ((s32)16384)) >> 15) * (((((((tmp1 * ((s32)bme280->params.dig_H6)) >> 10) *
+	    (((tmp1 * ((s32)bme280->params.dig_H3)) >> 11) + ((s32)32768))) >> 10) + 
+	    ((s32)2097152)) * ((s32)bme280->params.dig_H2) + 8192) >> 14));
+    tmp1 = (tmp1 - (((((tmp1 >> 15) * (tmp1 >> 15)) >> 7) *
+	    (( s32)bme280->params.dig_H1)) >> 4));
+    tmp1 = (tmp1 < 0 ? 0 : tmp1);
+    tmp1 = (tmp1 > 419430400 ? 419430400 : tmp1);
+
+    bme280->measurements.hum = (u32)(tmp1 >> 12);
 }
 
 static void bme280_calibrate_press(u32 press, struct bme280 *bme280){
        
     s64 tmp1, tmp2, tmp3; //, tmp4;
 
-	tmp1 = (s64)fine_t - 128000;
-	tmp2 = tmp1 * tmp1 * (s64)bme280->params.dig_P6;
-	tmp2 = tmp2 + ((tmp1 * (s64)bme280->params.dig_P5) << 17);
-	tmp2 = tmp2 + (((s64)bme280->params.dig_P4) << 35);
-	tmp1 = ((tmp1 * tmp1 * (s64)bme280->params.dig_P3) >> 8) + 
-		((tmp1 * (s64)bme280->params.dig_P2) << 12);
-	tmp1 = (((((s64)1) << 47) + tmp1)) * ((s64)bme280->params.dig_P1) >> 33;
-	if(tmp1 == 0){
-		bme280->measurements.press = 0;
-		return;	/* Avoid exception caused by division by zero */
-	}
-	tmp3 = 1048576 - (s32)press;
-	tmp3 = (((tmp3 << 31) - tmp2) * 3125);
-	//tmp4 = do_div(tmp3, tmp1);
-	tmp3 = div_s64(tmp3, tmp1);
-	tmp1 = (((s64)bme280->params.dig_P9) * (tmp3 >> 13) * (tmp3 >> 13)) >> 25;
-	tmp2 = (((s64)bme280->params.dig_P8) * tmp3) >> 19;
-	tmp3 = ((tmp3 + tmp1 + tmp2) >> 8) + (((s64)bme280->params.dig_P7) << 4);
-	bme280->measurements.press = (u32)tmp3;
+    tmp1 = (s64)fine_t - 128000;
+    tmp2 = tmp1 * tmp1 * (s64)bme280->params.dig_P6;
+    tmp2 = tmp2 + ((tmp1 * (s64)bme280->params.dig_P5) << 17);
+    tmp2 = tmp2 + (((s64)bme280->params.dig_P4) << 35);
+    tmp1 = ((tmp1 * tmp1 * (s64)bme280->params.dig_P3) >> 8) + 
+	    ((tmp1 * (s64)bme280->params.dig_P2) << 12);
+    tmp1 = (((((s64)1) << 47) + tmp1)) * ((s64)bme280->params.dig_P1) >> 33;
+    if(tmp1 == 0){
+	    bme280->measurements.press = 0;
+	    return;	/* Avoid exception caused by division by zero */
+    }
+    tmp3 = 1048576 - (s32)press;
+    tmp3 = (((tmp3 << 31) - tmp2) * 3125);
+    //tmp4 = do_div(tmp3, tmp1);
+    tmp3 = div_s64(tmp3, tmp1);
+    tmp1 = (((s64)bme280->params.dig_P9) * (tmp3 >> 13) * (tmp3 >> 13)) >> 25;
+    tmp2 = (((s64)bme280->params.dig_P8) * tmp3) >> 19;
+    tmp3 = ((tmp3 + tmp1 + tmp2) >> 8) + (((s64)bme280->params.dig_P7) << 4);
+    bme280->measurements.press = (u32)tmp3;
 }
 
 static int bme280_read(struct bme280 *bme280){
@@ -120,15 +123,23 @@ static int bme280_read(struct bme280 *bme280){
     u32 pressure, temperature, humidity;
     u8 data_readout[8];
     
-    // Switch to force mode
-    tmp = i2c_smbus_write_byte_data(bme280->client, 0xF4, 0x26);
-    if (tmp < 0){
-	return tmp;
+    // TODO add status check 0xF3
+    
+    
+    // TODO check if == is needed
+    if(normal_mode == 0){
+	// Switch to force mode
+	printk("BME280_driver: Reading measurements in forced mode.\n");
+	tmp = i2c_smbus_write_byte_data(bme280->client, 0xF4, 0x26);
+	if (tmp < 0){
+	    return tmp;
+	}
+	tmp = i2c_smbus_write_byte_data(bme280->client, 0xF2, 0x1);
+	if (tmp < 0){
+	    return tmp;
+	}
     }
-    tmp = i2c_smbus_write_byte_data(bme280->client, 0xF2, 0x1);
-    if (tmp < 0){
-	return tmp;
-    }
+    // TODO Switching to normal mode
 
     while(i < 8){
         tmp = i2c_smbus_read_byte_data(bme280->client, 0xF7 + i);
@@ -181,6 +192,37 @@ static ssize_t bme280_pressure_show(struct device *dev, struct device_attribute 
 }
 
 static DEVICE_ATTR(pressure,S_IRUSR,bme280_pressure_show,NULL);
+
+static ssize_t bme280_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t buflen)
+{
+    int res, mode;
+    
+    res = kstrtoint(buf, 10, &mode);
+    
+    if (res < 0){
+	printk("BME280_driver: Illegal value written for mode parameter.\n");
+	return EINVAL;
+    }
+    
+    if (mode == 0 || mode == 1){
+	normal_mode = mode;
+    }
+    else{
+	printk("BME280_driver: Mode not supported. Mode can be set to either 0 or 1.\n");
+	return EINVAL;
+    }
+	
+    return buflen;
+}
+
+static ssize_t bme280_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+    
+    return sprintf(buf, "%d\n", normal_mode);
+}
+
+static DEVICE_ATTR(mode, 0664, bme280_mode_show, bme280_mode_store);
+
 
 static const struct of_device_id bme280_of_match[] = { 
         { .compatible = "bosch,bme280" },
@@ -269,7 +311,11 @@ static int bme280_probe(struct i2c_client *client, const struct i2c_device_id *i
         pr_info("Pressure file creation failed\n"); 
         goto out_remove_temp_hum;
     }
- 
+    err=device_create_file(&client->dev, &dev_attr_mode);
+    if (err){
+        pr_info("Mode file creation failed\n"); 
+        goto out_remove_temp_hum_press;
+    }
     return 0; 
     
 out_remove_temp:
@@ -277,6 +323,10 @@ out_remove_temp:
 out_remove_temp_hum:
     device_remove_file(&client->dev, &dev_attr_temperature);
     device_remove_file(&client->dev, &dev_attr_humidity);
+out_remove_temp_hum_press:
+    device_remove_file(&client->dev, &dev_attr_temperature);
+    device_remove_file(&client->dev, &dev_attr_humidity);
+    device_remove_file(&client->dev, &dev_attr_pressure);
 out_err:
     return err;
     
@@ -292,6 +342,7 @@ static int bme280_remove(struct i2c_client *client) {
     device_remove_file(&client->dev, &dev_attr_temperature);
     device_remove_file(&client->dev, &dev_attr_humidity);
     device_remove_file(&client->dev, &dev_attr_pressure);
+    device_remove_file(&client->dev, &dev_attr_mode);
  
     /* Which hold gpiochip we want to work on */ 
    return 0; 
