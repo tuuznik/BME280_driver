@@ -123,10 +123,15 @@ static int bme280_read(struct bme280 *bme280){
     u32 pressure, temperature, humidity;
     u8 data_readout[8];
     
-    // TODO add status check 0xF3
+    do{
+	tmp = i2c_smbus_read_byte_data(bme280->client, 0xF3);
+	if (tmp < 0){
+	    return tmp;
+	}
+    } while (tmp & 0x8); // waiting for measuring to be set to 0
     
-    
-    // TODO check if == is needed
+    // TODO check current mode from registers and determine whether change is needed
+
     if(normal_mode == 0){
 	// Switch to force mode
 	printk("BME280_driver: Reading measurements in forced mode.\n");
@@ -139,7 +144,27 @@ static int bme280_read(struct bme280 *bme280){
 	    return tmp;
 	}
     }
-    // TODO Switching to normal mode
+    else if (normal_mode == 1){
+	// Switch to normal mode
+	printk("BME280_driver: Reading measurements in normal mode.\n");
+	tmp = i2c_smbus_write_byte_data(bme280->client, 0xF4, 0x27);
+	if (tmp < 0){
+	    return tmp;
+	}
+	tmp = i2c_smbus_write_byte_data(bme280->client, 0xF2, 0x1);
+	if (tmp < 0){
+	    return tmp;
+	}
+	// tstandby = 500 ms, filter off
+	tmp = i2c_smbus_write_byte_data(bme280->client, 0xF5, 0x80);
+	if (tmp < 0){
+	    return tmp;
+	}
+    }
+    else{
+	printk("BME280_driver: Invalid mode set. Reading measurements stopped.\n");
+	return EINVAL;
+    }
 
     while(i < 8){
         tmp = i2c_smbus_read_byte_data(bme280->client, 0xF7 + i);
@@ -209,7 +234,7 @@ static ssize_t bme280_mode_store(struct device *dev, struct device_attribute *at
     }
     else{
 	printk("BME280_driver: Mode not supported. Mode can be set to either 0 or 1.\n");
-	return EINVAL;
+	return ENOTSUPP;
     }
 	
     return buflen;
@@ -291,6 +316,8 @@ static int bme280_probe(struct i2c_client *client, const struct i2c_device_id *i
 
     bme280->client = client; 
     i2c_set_clientdata(client, bme280); 
+    
+    //TODO" read chip id, check chip id, reset the sensor, wait to 2ms according to table 1 and check status (im update)
     
     get_compensation_params(bme280);
  
