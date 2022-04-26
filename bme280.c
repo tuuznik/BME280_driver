@@ -4,18 +4,8 @@
 #include <linux/gpio.h> 
 #include <linux/i2c.h> 
 #include <asm/div64.h>
+#include <linux/delay.h>
 
-// static int __init bme280_init(void) { 
-//     pr_info("Hello world!\n"); 
-//     return 0; 
-// } 
- 
-// static void __exit bme280_exit(void) { 
-//     pr_info("Bye world\n"); 
-// } 
- 
-// module_init(bme280_init); 
-// module_exit(bme280_exit); 
 
 struct bme280_measurements {
     int press;
@@ -55,7 +45,6 @@ struct bme280 {
 static s32 fine_t = 0;
 // 0 - forced, 1 - normal
 static bool normal_mode = 0;
-//static char mybuf[100] = "mydevice";
 
 
 static void bme280_calibrate_temp(u32 temp, struct bme280 *bme280){
@@ -116,6 +105,54 @@ static void bme280_calibrate_press(u32 press, struct bme280 *bme280){
     bme280->measurements.press = (u32)tmp3;
 }
 
+static int bme280_set_sensor_mode(struct bme280 *bme280){
+    
+    int res;
+    
+    res = i2c_smbus_read_byte_data(bme280->client, 0xF4);
+    if (res < 0){
+	return res;
+    }
+
+    if (normal_mode != 0 && normal_mode != 1){
+	printk("BME280_driver: Invalid mode set. Reading measurements stopped.\n");
+	return EINVAL;
+    }
+
+
+    if(normal_mode == 0){
+	// Switch to force mode
+	printk("BME280_driver: Reading measurements in forced mode.\n");
+	res = i2c_smbus_write_byte_data(bme280->client, 0xF4, 0x26);
+	if (res < 0){
+	    return res;
+	}
+	res = i2c_smbus_write_byte_data(bme280->client, 0xF2, 0x1);
+	if (res < 0){
+	    return res;
+	}
+    }
+    else if (normal_mode == 1 && (~res & 0x3)){
+	// If normal mode is not set, switch to normal mode
+	printk("BME280_driver: Reading measurements in normal mode.\n");
+	res = i2c_smbus_write_byte_data(bme280->client, 0xF4, 0x27);
+	if (res < 0){
+	    return res;
+	}
+	res = i2c_smbus_write_byte_data(bme280->client, 0xF2, 0x1);
+	if (res < 0){
+	    return res;
+	}
+	// tstandby = 500 ms, filter off
+	res = i2c_smbus_write_byte_data(bme280->client, 0xF5, 0x80);
+	if (res < 0){
+	    return res;
+	}
+    }
+
+    return 0;
+}
+
 static int bme280_read(struct bme280 *bme280){
 
     int tmp;
@@ -130,42 +167,8 @@ static int bme280_read(struct bme280 *bme280){
 	}
     } while (tmp & 0x8); // waiting for measuring to be set to 0
     
-    // TODO check current mode from registers and determine whether change is needed
-
-    if(normal_mode == 0){
-	// Switch to force mode
-	printk("BME280_driver: Reading measurements in forced mode.\n");
-	tmp = i2c_smbus_write_byte_data(bme280->client, 0xF4, 0x26);
-	if (tmp < 0){
-	    return tmp;
-	}
-	tmp = i2c_smbus_write_byte_data(bme280->client, 0xF2, 0x1);
-	if (tmp < 0){
-	    return tmp;
-	}
-    }
-    else if (normal_mode == 1){
-	// Switch to normal mode
-	printk("BME280_driver: Reading measurements in normal mode.\n");
-	tmp = i2c_smbus_write_byte_data(bme280->client, 0xF4, 0x27);
-	if (tmp < 0){
-	    return tmp;
-	}
-	tmp = i2c_smbus_write_byte_data(bme280->client, 0xF2, 0x1);
-	if (tmp < 0){
-	    return tmp;
-	}
-	// tstandby = 500 ms, filter off
-	tmp = i2c_smbus_write_byte_data(bme280->client, 0xF5, 0x80);
-	if (tmp < 0){
-	    return tmp;
-	}
-    }
-    else{
-	printk("BME280_driver: Invalid mode set. Reading measurements stopped.\n");
-	return EINVAL;
-    }
-
+    bme280_set_sensor_mode(bme280);
+ 
     while(i < 8){
         tmp = i2c_smbus_read_byte_data(bme280->client, 0xF7 + i);
         data_readout[i] = (u8)(tmp & 0xFF);
@@ -306,7 +309,7 @@ static int get_compensation_params(struct bme280 *bme280){
 static int bme280_probe(struct i2c_client *client, const struct i2c_device_id *id) {
     
     struct bme280 *bme280; 
-    int err;
+    int err, res;
 
     if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE_DATA)) 
         return -EIO; 
@@ -315,12 +318,22 @@ static int bme280_probe(struct i2c_client *client, const struct i2c_device_id *i
         return -ENOMEM; 
 
     bme280->client = client; 
-    i2c_set_clientdata(client, bme280); 
     
-    //TODO" read chip id, check chip id, reset the sensor, wait to 2ms according to table 1 and check status (im update)
+    res = i2c_smbus_read_byte_data(bme280->client, 0xD0);
+    if (res < 0){
+	goto out_remove_all;
+    }
     
-    get_compensation_params(bme280);
- 
+    if (res != 0x60){
+	printk("BME280 driver: Incorrect client chip ID: %x!", res);
+	goto out_remove_all;
+    }
+    else{
+	printk("BME280 driver: Client chip ID: %x", res);
+    }
+    
+    i2c_set_clientdata(client, bme280);
+    
     err=device_create_file(&client->dev, &dev_attr_temperature);
     if (err){
         pr_info("Temp file creation failed\n"); 
@@ -343,6 +356,22 @@ static int bme280_probe(struct i2c_client *client, const struct i2c_device_id *i
         pr_info("Mode file creation failed\n"); 
         goto out_remove_temp_hum_press;
     }
+    /*
+    res = i2c_smbus_write_byte_data(bme280->client, 0xE0, 0xB6);
+    if (res < 0){
+	return res;
+    }
+    mdelay(2); 
+    
+    do{
+	res = i2c_smbus_read_byte_data(bme280->client, 0xF3);
+	if (res < 0){
+	    return res;
+	}
+    } while (res & 0x1); // waiting for measuring to be set to 0 */
+    printk("Device ready");
+    get_compensation_params(bme280);
+    
     return 0; 
     
 out_remove_temp:
@@ -354,6 +383,11 @@ out_remove_temp_hum_press:
     device_remove_file(&client->dev, &dev_attr_temperature);
     device_remove_file(&client->dev, &dev_attr_humidity);
     device_remove_file(&client->dev, &dev_attr_pressure);
+out_remove_all:
+    device_remove_file(&client->dev, &dev_attr_temperature);
+    device_remove_file(&client->dev, &dev_attr_humidity);
+    device_remove_file(&client->dev, &dev_attr_pressure);
+    device_remove_file(&client->dev, &dev_attr_mode);
 out_err:
     return err;
     
