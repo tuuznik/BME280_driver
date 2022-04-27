@@ -6,7 +6,19 @@
 #include <asm/div64.h>
 #include <linux/delay.h>
 
+#define BME280_CHIP_ID      0xD0
+#define BME280_CTRL_HUM     0xF2
+#define BME280_STATUS       0xF3
+#define BME280_CTRL_MEAS    0xF4
+#define BME280_CONFIG       0xF5
+#define BME280_PRESS_MSB    0xF7
+#define BME280_TEMP_MSB     0xFA
+#define BME280_HUM_MSB      0xFD
+#define BME280_DIG_T1_LSB   0x88   
+#define BME280_DIG_H1       0xA1
+#define BME280_DIG_H2_LSB   0xE1    
 
+#define BME280_CHIP_ID_VALUE   0x60
 struct bme280_measurements {
     u32 press;
     u32 hum;
@@ -108,7 +120,7 @@ static int bme280_set_sensor_mode(struct bme280 *bme280)
 {    
     int res;
     
-    res = i2c_smbus_read_byte_data(bme280->client, 0xF4);
+    res = i2c_smbus_read_byte_data(bme280->client, BME280_CTRL_MEAS);
     if (res < 0){
 	    return res;
     }
@@ -121,11 +133,11 @@ static int bme280_set_sensor_mode(struct bme280 *bme280)
     if(normal_mode == 0){
         // Switch to force mode
         printk("BME280_driver: Reading measurements in forced mode.\n");
-        res = i2c_smbus_write_byte_data(bme280->client, 0xF4, 0x26);
+        res = i2c_smbus_write_byte_data(bme280->client, BME280_CTRL_MEAS, 0x26);
         if (res < 0){
             return res;
         }
-        res = i2c_smbus_write_byte_data(bme280->client, 0xF2, 0x1);
+        res = i2c_smbus_write_byte_data(bme280->client, BME280_CTRL_HUM, 0x1);
         if (res < 0){
             return res;
         }
@@ -133,16 +145,16 @@ static int bme280_set_sensor_mode(struct bme280 *bme280)
     else if (normal_mode == 1 && (~res & 0x3)){
         // If normal mode is not set, switch to normal mode
         printk("BME280_driver: Reading measurements in normal mode.\n");
-        res = i2c_smbus_write_byte_data(bme280->client, 0xF4, 0x27);
+        res = i2c_smbus_write_byte_data(bme280->client, BME280_CTRL_MEAS, 0x27);
         if (res < 0){
             return res;
         }
-        res = i2c_smbus_write_byte_data(bme280->client, 0xF2, 0x1);
+        res = i2c_smbus_write_byte_data(bme280->client, BME280_CTRL_HUM, 0x1);
         if (res < 0){
             return res;
         }
         // tstandby = 500 ms, filter off
-        res = i2c_smbus_write_byte_data(bme280->client, 0xF5, 0x80);
+        res = i2c_smbus_write_byte_data(bme280->client, BME280_CONFIG, 0x80);
         if (res < 0){
             return res;
         }
@@ -159,7 +171,7 @@ static int bme280_read(struct bme280 *bme280)
     u8 data[8];
     
     do{
-        res = i2c_smbus_read_byte_data(bme280->client, 0xF3);
+        res = i2c_smbus_read_byte_data(bme280->client, BME280_STATUS);
         if (res < 0){
             return res;
         }
@@ -171,7 +183,7 @@ static int bme280_read(struct bme280 *bme280)
     }
 
     while(i < 8){
-        res = i2c_smbus_read_byte_data(bme280->client, 0xF7 + i);
+        res = i2c_smbus_read_byte_data(bme280->client, BME280_PRESS_MSB + i);
         data[i] = (u8)(res & 0xFF);
         i ++;
     }
@@ -274,7 +286,7 @@ static int get_compensation_params(struct bme280 *bme280)
     int i;
     
     while (i < 24) {
-        buf[i] = (u8)(i2c_smbus_read_byte_data(bme280->client, 0x88 + i) & 0xFF);
+        buf[i] = (u8)(i2c_smbus_read_byte_data(bme280->client, BME280_DIG_T1_LSB + i) & 0xFF);
         i++;
     }
 
@@ -293,11 +305,11 @@ static int get_compensation_params(struct bme280 *bme280)
       
     i = 0;
     while (i < 8) {
-        buf[i] = (u8)(i2c_smbus_read_byte_data(bme280->client, 0xE1 + i) & 0xFF);
+        buf[i] = (u8)(i2c_smbus_read_byte_data(bme280->client, BME280_DIG_H2_LSB + i) & 0xFF);
         i++;
     }
     
-    bme280->params.dig_H1 = (u8)(i2c_smbus_read_byte_data(bme280->client, 0xA1) & 0xFF);
+    bme280->params.dig_H1 = (u8)(i2c_smbus_read_byte_data(bme280->client, BME280_DIG_H1) & 0xFF);
     bme280->params.dig_H2 = (s16)((buf[1] << 8) | buf[0]);
     bme280->params.dig_H3 = (u8)(buf[2]);
     bme280->params.dig_H4 = (s16)((buf[4] & 0xF) | (buf[3] << 4));
@@ -321,12 +333,12 @@ static int bme280_probe(struct i2c_client *client, const struct i2c_device_id *i
 
     bme280->client = client; 
     
-    res = i2c_smbus_read_byte_data(bme280->client, 0xD0);
+    res = i2c_smbus_read_byte_data(bme280->client, BME280_CHIP_ID);
     if (res < 0){
 	goto out_remove_all;
     }
     
-    if (res != 0x60){
+    if (res != BME280_CHIP_ID_VALUE){
 	printk("BME280 driver: Incorrect client chip ID: %x!", res);
 	goto out_remove_all;
     }
