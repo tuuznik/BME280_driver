@@ -8,30 +8,30 @@
 
 
 struct bme280_measurements {
-    int press;
-    int hum;
-    int temp;
+    u32 press;
+    u32 hum;
+    s32 temp;
 };
 
-struct bme280_compensation_params{
-    unsigned short dig_T1;
-    signed short dig_T2;
-    signed short dig_T3;
-    unsigned short dig_P1;
-    signed short dig_P2;
-    signed short dig_P3;
-    signed short dig_P4;
-    signed short dig_P5;
-    signed short dig_P6;
-    signed short dig_P7;
-    signed short dig_P8;
-    signed short dig_P9;
-    unsigned char dig_H1;
-    signed short dig_H2;
-    unsigned char dig_H3;
-    signed short dig_H4;
-    signed short dig_H5;
-    signed char dig_H6;	
+struct bme280_compensation_params {
+    u16 dig_T1;
+    s16 dig_T2;
+    s16 dig_T3;
+    u16 dig_P1;
+    s16 dig_P2;
+    s16 dig_P3;
+    s16 dig_P4;
+    s16 dig_P5;
+    s16 dig_P6;
+    s16 dig_P7;
+    s16 dig_P8;
+    s16 dig_P9;
+    u8 dig_H1;
+    s16 dig_H2;
+    u8 dig_H3;
+    s16 dig_H4;
+    s16 dig_H5;
+    s8 dig_H6;	
 };
 
 struct bme280 { 
@@ -42,32 +42,32 @@ struct bme280 {
    struct bme280_compensation_params params;
 }; 
 
-static s32 fine_t = 0;
+static s32 t_fine = 0;
 // 0 - forced, 1 - normal
 static bool normal_mode = 0;
 
 
-static void bme280_calibrate_temp(u32 temp, struct bme280 *bme280){
-
+static void bme280_calibrate_temp(s32 adc_T, struct bme280 *bme280)
+{
     s32 tmp1, tmp2;
 
-    tmp1 = ((((temp >> 3) - ((s32)bme280->params.dig_T1 << 1))) * 
+    tmp1 = ((((adc_T >> 3) - ((s32)bme280->params.dig_T1 << 1))) * 
 	    ((s32)bme280->params.dig_T2)) >> 11;
-    tmp2 = (((((temp >> 4) - ((s32)bme280->params.dig_T1)) * 
-	    ((temp >> 4) - ((s32)bme280->params.dig_T1))) >> 12) *
+    tmp2 = (((((adc_T >> 4) - ((s32)bme280->params.dig_T1)) * 
+	    ((adc_T >> 4) - ((s32)bme280->params.dig_T1))) >> 12) *
 	    ((s32)bme280->params.dig_T3)) >> 14;
-    fine_t = tmp1 + tmp2;
+    t_fine = tmp1 + tmp2;
 	
-    bme280->measurements.temp = (fine_t * 5 + 128) >> 8; 
+    bme280->measurements.temp = (t_fine * 5 + 128) >> 8; 
 }
 
 
-static void bme280_calibrate_hum(u32 hum, struct bme280 *bme280){
-    
+static void bme280_calibrate_hum(s32 adc_H, struct bme280 *bme280)
+{    
     s32 tmp1;
 
-    tmp1 = (fine_t - ((s32)76800));
-    tmp1 = ((((hum << 14) - (((s32)bme280->params.dig_H4 << 20) -
+    tmp1 = (t_fine - ((s32)76800));
+    tmp1 = ((((adc_H << 14) - (((s32)bme280->params.dig_H4 << 20) -
 	    (((s32)bme280->params.dig_H5) * tmp1)) +
 	    ((s32)16384)) >> 15) * (((((((tmp1 * ((s32)bme280->params.dig_H6)) >> 10) *
 	    (((tmp1 * ((s32)bme280->params.dig_H3)) >> 11) + ((s32)32768))) >> 10) + 
@@ -80,11 +80,11 @@ static void bme280_calibrate_hum(u32 hum, struct bme280 *bme280){
     bme280->measurements.hum = (u32)(tmp1 >> 12);
 }
 
-static void bme280_calibrate_press(u32 press, struct bme280 *bme280){
-       
-    s64 tmp1, tmp2, tmp3; //, tmp4;
+static void bme280_calibrate_press(u32 adc_P, struct bme280 *bme280)
+{       
+    s64 tmp1, tmp2, tmp3;
 
-    tmp1 = (s64)fine_t - 128000;
+    tmp1 = (s64)t_fine - 128000;
     tmp2 = tmp1 * tmp1 * (s64)bme280->params.dig_P6;
     tmp2 = tmp2 + ((tmp1 * (s64)bme280->params.dig_P5) << 17);
     tmp2 = tmp2 + (((s64)bme280->params.dig_P4) << 35);
@@ -95,9 +95,8 @@ static void bme280_calibrate_press(u32 press, struct bme280 *bme280){
 	    bme280->measurements.press = 0;
 	    return;	/* Avoid exception caused by division by zero */
     }
-    tmp3 = 1048576 - (s32)press;
+    tmp3 = 1048576 - (s32)adc_P;
     tmp3 = (((tmp3 << 31) - tmp2) * 3125);
-    //tmp4 = do_div(tmp3, tmp1);
     tmp3 = div_s64(tmp3, tmp1);
     tmp1 = (((s64)bme280->params.dig_P9) * (tmp3 >> 13) * (tmp3 >> 13)) >> 25;
     tmp2 = (((s64)bme280->params.dig_P8) * tmp3) >> 19;
@@ -105,79 +104,82 @@ static void bme280_calibrate_press(u32 press, struct bme280 *bme280){
     bme280->measurements.press = (u32)tmp3;
 }
 
-static int bme280_set_sensor_mode(struct bme280 *bme280){
-    
+static int bme280_set_sensor_mode(struct bme280 *bme280)
+{    
     int res;
     
     res = i2c_smbus_read_byte_data(bme280->client, 0xF4);
     if (res < 0){
-	return res;
+	    return res;
     }
 
     if (normal_mode != 0 && normal_mode != 1){
-	printk("BME280_driver: Invalid mode set. Reading measurements stopped.\n");
-	return EINVAL;
+	    printk("BME280_driver: Invalid mode set. Reading measurements stopped.\n");
+	    return EINVAL;
     }
-
 
     if(normal_mode == 0){
-	// Switch to force mode
-	printk("BME280_driver: Reading measurements in forced mode.\n");
-	res = i2c_smbus_write_byte_data(bme280->client, 0xF4, 0x26);
-	if (res < 0){
-	    return res;
-	}
-	res = i2c_smbus_write_byte_data(bme280->client, 0xF2, 0x1);
-	if (res < 0){
-	    return res;
-	}
+        // Switch to force mode
+        printk("BME280_driver: Reading measurements in forced mode.\n");
+        res = i2c_smbus_write_byte_data(bme280->client, 0xF4, 0x26);
+        if (res < 0){
+            return res;
+        }
+        res = i2c_smbus_write_byte_data(bme280->client, 0xF2, 0x1);
+        if (res < 0){
+            return res;
+        }
     }
     else if (normal_mode == 1 && (~res & 0x3)){
-	// If normal mode is not set, switch to normal mode
-	printk("BME280_driver: Reading measurements in normal mode.\n");
-	res = i2c_smbus_write_byte_data(bme280->client, 0xF4, 0x27);
-	if (res < 0){
-	    return res;
-	}
-	res = i2c_smbus_write_byte_data(bme280->client, 0xF2, 0x1);
-	if (res < 0){
-	    return res;
-	}
-	// tstandby = 500 ms, filter off
-	res = i2c_smbus_write_byte_data(bme280->client, 0xF5, 0x80);
-	if (res < 0){
-	    return res;
-	}
+        // If normal mode is not set, switch to normal mode
+        printk("BME280_driver: Reading measurements in normal mode.\n");
+        res = i2c_smbus_write_byte_data(bme280->client, 0xF4, 0x27);
+        if (res < 0){
+            return res;
+        }
+        res = i2c_smbus_write_byte_data(bme280->client, 0xF2, 0x1);
+        if (res < 0){
+            return res;
+        }
+        // tstandby = 500 ms, filter off
+        res = i2c_smbus_write_byte_data(bme280->client, 0xF5, 0x80);
+        if (res < 0){
+            return res;
+        }
     }
 
     return 0;
 }
 
-static int bme280_read(struct bme280 *bme280){
-
-    int tmp;
+static int bme280_read(struct bme280 *bme280)
+{
+    int res;
     int i = 0;
     u32 pressure, temperature, humidity;
-    u8 data_readout[8];
+    u8 data[8];
     
     do{
-	tmp = i2c_smbus_read_byte_data(bme280->client, 0xF3);
-	if (tmp < 0){
-	    return tmp;
-	}
-    } while (tmp & 0x8); // waiting for measuring to be set to 0
+        res = i2c_smbus_read_byte_data(bme280->client, 0xF3);
+        if (res < 0){
+            return res;
+        }
+    } while (res & 0x8); // waiting for measuring to be set to 0
     
-    bme280_set_sensor_mode(bme280);
- 
+    res = bme280_set_sensor_mode(bme280);
+    if (res < 0){
+        return res;
+    }
+
     while(i < 8){
-        tmp = i2c_smbus_read_byte_data(bme280->client, 0xF7 + i);
-        data_readout[i] = (u8)(tmp & 0xFF);
+        res = i2c_smbus_read_byte_data(bme280->client, 0xF7 + i);
+        data[i] = (u8)(res & 0xFF);
         i ++;
     }
     
-    pressure = (data_readout[0] << 12) | (data_readout[0] << 4)  | (data_readout[0] >> 4); 
-    temperature = (data_readout[3] << 12) | (data_readout[4] << 4)  | (data_readout[5] >> 4);
-    humidity = (data_readout[6] << 8) | data_readout[7];
+    pressure = (data[0] << 12) | (data[0] << 4)  | (data[0] >> 4); 
+    temperature = (data[3] << 12) | (data[4] << 4)  | (data[5] >> 4);
+    humidity = (data[6] << 8) | data[7];
+
     bme280_calibrate_temp(temperature, bme280);
     bme280_calibrate_hum(humidity, bme280);
     bme280_calibrate_press(pressure, bme280);
@@ -266,48 +268,48 @@ static struct i2c_device_id bme280_idtable[] = {
 MODULE_DEVICE_TABLE(i2c, bme280_idtable); 
 
 
-static int get_compensation_params(struct bme280 *bme280){
-    
+static int get_compensation_params(struct bme280 *bme280)
+{    
     u8 buf[24];
     int i;
     
-    while (i < 24){
+    while (i < 24) {
         buf[i] = (u8)(i2c_smbus_read_byte_data(bme280->client, 0x88 + i) & 0xFF);
         i++;
     }
 
-    bme280->params.dig_T1 = (unsigned short)((buf[1] << 8) | buf[0]);
-    bme280->params.dig_T2 = (signed short)((buf[3] << 8) | buf[2]);
-    bme280->params.dig_T3 = (signed short)((buf[5] << 8) | buf[4]);
-    bme280->params.dig_P1 = (unsigned short)((buf[7] << 8) | buf[6]);
-    bme280->params.dig_P2 = (signed short)((buf[9] << 8) | buf[8]);
-    bme280->params.dig_P3 = (signed short)((buf[11] << 8) | buf[10]);
-    bme280->params.dig_P4 = (signed short)((buf[13] << 8) | buf[12]);
-    bme280->params.dig_P5 = (signed short)((buf[15] << 8) | buf[14]);
-    bme280->params.dig_P6 = (signed short)((buf[17] << 8) | buf[16]);
-    bme280->params.dig_P7 = (signed short)((buf[19] << 8) | buf[18]);
-    bme280->params.dig_P8 = (signed short)((buf[21] << 8) | buf[20]);
-    bme280->params.dig_P9 = (signed short)((buf[23] << 8) | buf[22]);
+    bme280->params.dig_T1 = (u16)((buf[1] << 8) | buf[0]);
+    bme280->params.dig_T2 = (s16)((buf[3] << 8) | buf[2]);
+    bme280->params.dig_T3 = (s16)((buf[5] << 8) | buf[4]);
+    bme280->params.dig_P1 = (u16)((buf[7] << 8) | buf[6]);
+    bme280->params.dig_P2 = (s16)((buf[9] << 8) | buf[8]);
+    bme280->params.dig_P3 = (s16)((buf[11] << 8) | buf[10]);
+    bme280->params.dig_P4 = (s16)((buf[13] << 8) | buf[12]);
+    bme280->params.dig_P5 = (s16)((buf[15] << 8) | buf[14]);
+    bme280->params.dig_P6 = (s16)((buf[17] << 8) | buf[16]);
+    bme280->params.dig_P7 = (s16)((buf[19] << 8) | buf[18]);
+    bme280->params.dig_P8 = (s16)((buf[21] << 8) | buf[20]);
+    bme280->params.dig_P9 = (s16)((buf[23] << 8) | buf[22]);
       
     i = 0;
-    while (i < 8){
+    while (i < 8) {
         buf[i] = (u8)(i2c_smbus_read_byte_data(bme280->client, 0xE1 + i) & 0xFF);
         i++;
     }
     
-    bme280->params.dig_H1 = (unsigned char)(i2c_smbus_read_byte_data(bme280->client, 0xA1) & 0xFF);
-    bme280->params.dig_H2 = (signed short)((buf[1] << 8) | buf[0]);
-    bme280->params.dig_H3 = (unsigned char)(buf[2]);
-    bme280->params.dig_H4 = (signed short)((buf[4] & 0xF) | (buf[3] << 4));
-    bme280->params.dig_H5 = (signed short)((buf[6] << 4) | (buf[5] & 0xF));
-    bme280->params.dig_H6 = (signed char)(buf[7]);
+    bme280->params.dig_H1 = (u8)(i2c_smbus_read_byte_data(bme280->client, 0xA1) & 0xFF);
+    bme280->params.dig_H2 = (s16)((buf[1] << 8) | buf[0]);
+    bme280->params.dig_H3 = (u8)(buf[2]);
+    bme280->params.dig_H4 = (s16)((buf[4] & 0xF) | (buf[3] << 4));
+    bme280->params.dig_H5 = (s16)((buf[6] << 4) | (buf[5] & 0xF));
+    bme280->params.dig_H6 = (s8)(buf[7]);
     
     return 0;
 }
 
 
-static int bme280_probe(struct i2c_client *client, const struct i2c_device_id *id) {
-    
+static int bme280_probe(struct i2c_client *client, const struct i2c_device_id *id) 
+{    
     struct bme280 *bme280; 
     int err, res;
 
@@ -369,8 +371,14 @@ static int bme280_probe(struct i2c_client *client, const struct i2c_device_id *i
 	    return res;
 	}
     } while (res & 0x1); // waiting for measuring to be set to 0 */
-    printk("Device ready");
-    get_compensation_params(bme280);
+
+    res = get_compensation_params(bme280);
+    if (res){
+        pr_info("BME280 driver: Reading compensation parameters failed!\n"); 
+        goto out_remove_all;
+    }
+
+    printk("BME280 driver: Device probed and ready.");
     
     return 0; 
     
@@ -393,8 +401,8 @@ out_err:
     
 }
 
-static int bme280_remove(struct i2c_client *client) {
-
+static int bme280_remove(struct i2c_client *client)
+{
     struct bme280 *bme280; 
  
     /* We retrieve our private data */ 
@@ -404,8 +412,9 @@ static int bme280_remove(struct i2c_client *client) {
     device_remove_file(&client->dev, &dev_attr_humidity);
     device_remove_file(&client->dev, &dev_attr_pressure);
     device_remove_file(&client->dev, &dev_attr_mode);
- 
-    /* Which hold gpiochip we want to work on */ 
+
+    printk("BME280 driver: Device removed.");
+
    return 0; 
 }
 
