@@ -7,6 +7,7 @@ dtoverlay=i2c-sensor,bme280,addr=0x77
 
 It results in adding dts overlay with the following entry to the Linux device tree:
 
+```
 fragment@0 {
 		target = <&i2c_arm>;
 		__dormant__ {
@@ -21,3 +22,4 @@ fragment@0 {
 			};
 		};
 	};
+```
