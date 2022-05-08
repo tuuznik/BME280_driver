@@ -302,14 +302,6 @@ static const struct of_device_id bme280_of_match[] = {
 }; 
 MODULE_DEVICE_TABLE(of, bme280_of_match); 
 
-static struct i2c_device_id bme280_idtable[] = { 
-   { "bme280", 0 },
-   { }
-}; 
- 
-MODULE_DEVICE_TABLE(i2c, bme280_idtable); 
-
-
 static int get_compensation_params(struct bme280 *bme280)
 {    
     u8 buf[T_P_CALIB_REGS_COUNT];
@@ -468,9 +460,7 @@ static struct i2c_driver bme280_driver = {
         .name = "bme280", 
         .owner = THIS_MODULE,
         .of_match_table = of_match_ptr(bme280_of_match),
-   }, 
- 
-   .id_table = bme280_idtable, 
+   },
    .probe    = bme280_probe, 
    .remove   = bme280_remove, 
 };
