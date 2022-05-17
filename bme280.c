@@ -66,6 +66,12 @@ static void bme280_calibrate_temp(s32 adc_T, struct bme280 *bme280)
 {
     s32 tmp1, tmp2;
 
+    if (adc_T == 0x8000) {
+	bme280->measurements.temp = 0;
+        return;
+    }
+
+
     tmp1 = ((((adc_T >> 3) - ((s32)bme280->params.dig_T1 << 1))) * 
 	    ((s32)bme280->params.dig_T2)) >> 11;
     tmp2 = (((((adc_T >> 4) - ((s32)bme280->params.dig_T1)) * 
@@ -80,6 +86,11 @@ static void bme280_calibrate_temp(s32 adc_T, struct bme280 *bme280)
 static void bme280_calibrate_hum(s32 adc_H, struct bme280 *bme280)
 {    
     s32 tmp1;
+
+    if (adc_H == 0x8000) {
+	bme280->measurements.hum = 0;
+        return;
+    }
 
     tmp1 = (t_fine - ((s32)76800));
     tmp1 = ((((adc_H << 14) - (((s32)bme280->params.dig_H4 << 20) -
@@ -98,6 +109,11 @@ static void bme280_calibrate_hum(s32 adc_H, struct bme280 *bme280)
 static void bme280_calibrate_press(u32 adc_P, struct bme280 *bme280)
 {       
     s64 tmp1, tmp2, tmp3;
+
+    if (adc_P == 0x8000) {
+	bme280->measurements.press = 0;
+        return;
+    }
 
     tmp1 = (s64)t_fine - 128000;
     tmp2 = tmp1 * tmp1 * (s64)bme280->params.dig_P6;
@@ -136,11 +152,11 @@ static int bme280_set_sensor_mode(struct bme280 *bme280)
     if(sensor_mode == 0) {
         // Switch to force mode
         pr_info("BME280 driver: Reading measurements in forced mode.\n");
-        res = i2c_smbus_write_byte_data(bme280->client, BME280_CTRL_MEAS, 0x26);
+        res = i2c_smbus_write_byte_data(bme280->client, BME280_CTRL_HUM, 0x1);
         if (res < 0) {
             return res;
         }
-        res = i2c_smbus_write_byte_data(bme280->client, BME280_CTRL_HUM, 0x1);
+        res = i2c_smbus_write_byte_data(bme280->client, BME280_CTRL_MEAS, 0x26);
         if (res < 0) {
             return res;
         }
@@ -148,11 +164,11 @@ static int bme280_set_sensor_mode(struct bme280 *bme280)
     else if (sensor_mode == 1 && (~res & 0x3)) {
         // If normal mode is not set, switch to normal mode
         pr_info("BME280 driver: Reading measurements in normal mode.\n");
-        res = i2c_smbus_write_byte_data(bme280->client, BME280_CTRL_MEAS, 0x27);
+        res = i2c_smbus_write_byte_data(bme280->client, BME280_CTRL_HUM, 0x1);
         if (res < 0) {
             return res;
         }
-        res = i2c_smbus_write_byte_data(bme280->client, BME280_CTRL_HUM, 0x1);
+        res = i2c_smbus_write_byte_data(bme280->client, BME280_CTRL_MEAS, 0x27);
         if (res < 0) {
             return res;
         }
