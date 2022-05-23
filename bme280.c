@@ -64,7 +64,7 @@ static bool sensor_mode = 0;
 
 static void bme280_calibrate_temp(s32 adc_T, struct bme280 *bme280)
 {
-    s32 tmp1, tmp2;
+    s32 var1, var2;
 
     if (adc_T == 0x8000) {
 	bme280->measurements.temp = 0;
@@ -72,12 +72,12 @@ static void bme280_calibrate_temp(s32 adc_T, struct bme280 *bme280)
     }
 
 
-    tmp1 = ((((adc_T >> 3) - ((s32)bme280->params.dig_T1 << 1))) * 
+    var1 = ((((adc_T >> 3) - ((s32)bme280->params.dig_T1 << 1))) * 
 	    ((s32)bme280->params.dig_T2)) >> 11;
-    tmp2 = (((((adc_T >> 4) - ((s32)bme280->params.dig_T1)) * 
+    var2 = (((((adc_T >> 4) - ((s32)bme280->params.dig_T1)) * 
 	    ((adc_T >> 4) - ((s32)bme280->params.dig_T1))) >> 12) *
 	    ((s32)bme280->params.dig_T3)) >> 14;
-    t_fine = tmp1 + tmp2;
+    t_fine = var1 + var2;
 	
     bme280->measurements.temp = (t_fine * 5 + 128) >> 8; 
 }
@@ -85,54 +85,54 @@ static void bme280_calibrate_temp(s32 adc_T, struct bme280 *bme280)
 
 static void bme280_calibrate_hum(s32 adc_H, struct bme280 *bme280)
 {    
-    s32 tmp1;
+    s32 var1;
 
     if (adc_H == 0x8000) {
 	bme280->measurements.hum = 0;
         return;
     }
 
-    tmp1 = (t_fine - ((s32)76800));
-    tmp1 = ((((adc_H << 14) - (((s32)bme280->params.dig_H4 << 20) -
-	    (((s32)bme280->params.dig_H5) * tmp1)) +
-	    ((s32)16384)) >> 15) * (((((((tmp1 * ((s32)bme280->params.dig_H6)) >> 10) *
-	    (((tmp1 * ((s32)bme280->params.dig_H3)) >> 11) + ((s32)32768))) >> 10) + 
+    var1 = (t_fine - ((s32)76800));
+    var1 = ((((adc_H << 14) - (((s32)bme280->params.dig_H4 << 20) -
+	    (((s32)bme280->params.dig_H5) * var1)) +
+	    ((s32)16384)) >> 15) * (((((((var1 * ((s32)bme280->params.dig_H6)) >> 10) *
+	    (((var1 * ((s32)bme280->params.dig_H3)) >> 11) + ((s32)32768))) >> 10) + 
 	    ((s32)2097152)) * ((s32)bme280->params.dig_H2) + 8192) >> 14));
-    tmp1 = (tmp1 - (((((tmp1 >> 15) * (tmp1 >> 15)) >> 7) *
+    var1 = (var1 - (((((var1 >> 15) * (var1 >> 15)) >> 7) *
 	    (( s32)bme280->params.dig_H1)) >> 4));
-    tmp1 = (tmp1 < 0 ? 0 : tmp1);
-    tmp1 = (tmp1 > 419430400 ? 419430400 : tmp1);
+    var1 = (var1 < 0 ? 0 : var1);
+    var1 = (var1 > 419430400 ? 419430400 : var1);
 
-    bme280->measurements.hum = (u32)(tmp1 >> 12);
+    bme280->measurements.hum = (u32)(var1 >> 12);
 }
 
 static void bme280_calibrate_press(u32 adc_P, struct bme280 *bme280)
 {       
-    s64 tmp1, tmp2, tmp3;
+    s64 var1, var2, var3;
 
     if (adc_P == 0x8000) {
 	bme280->measurements.press = 0;
         return;
     }
 
-    tmp1 = (s64)t_fine - 128000;
-    tmp2 = tmp1 * tmp1 * (s64)bme280->params.dig_P6;
-    tmp2 = tmp2 + ((tmp1 * (s64)bme280->params.dig_P5) << 17);
-    tmp2 = tmp2 + (((s64)bme280->params.dig_P4) << 35);
-    tmp1 = ((tmp1 * tmp1 * (s64)bme280->params.dig_P3) >> 8) + 
-	    ((tmp1 * (s64)bme280->params.dig_P2) << 12);
-    tmp1 = (((((s64)1) << 47) + tmp1)) * ((s64)bme280->params.dig_P1) >> 33;
-    if(tmp1 == 0) {
+    var1 = (s64)t_fine - 128000;
+    var2 = var1 * var1 * (s64)bme280->params.dig_P6;
+    var2 = var2 + ((var1 * (s64)bme280->params.dig_P5) << 17);
+    var2 = var2 + (((s64)bme280->params.dig_P4) << 35);
+    var1 = ((var1 * var1 * (s64)bme280->params.dig_P3) >> 8) + 
+	    ((var1 * (s64)bme280->params.dig_P2) << 12);
+    var1 = (((((s64)1) << 47) + var1)) * ((s64)bme280->params.dig_P1) >> 33;
+    if(var1 == 0) {
 	    bme280->measurements.press = 0;
-	    return;	/* Avoid exception caused by division by zero */
+	    return;
     }
-    tmp3 = 1048576 - (s32)adc_P;
-    tmp3 = (((tmp3 << 31) - tmp2) * 3125);
-    tmp3 = div_s64(tmp3, tmp1);
-    tmp1 = (((s64)bme280->params.dig_P9) * (tmp3 >> 13) * (tmp3 >> 13)) >> 25;
-    tmp2 = (((s64)bme280->params.dig_P8) * tmp3) >> 19;
-    tmp3 = ((tmp3 + tmp1 + tmp2) >> 8) + (((s64)bme280->params.dig_P7) << 4);
-    bme280->measurements.press = (u32)tmp3;
+    var3 = 1048576 - (s32)adc_P;
+    var3 = (((var3 << 31) - var2) * 3125);
+    var3 = div_s64(var3, var1);
+    var1 = (((s64)bme280->params.dig_P9) * (var3 >> 13) * (var3 >> 13)) >> 25;
+    var2 = (((s64)bme280->params.dig_P8) * var3) >> 19;
+    var3 = ((var3 + var1 + var2) >> 8) + (((s64)bme280->params.dig_P7) << 4);
+    bme280->measurements.press = (u32)var3;
 }
 
 static int bme280_set_sensor_mode(struct bme280 *bme280)
@@ -157,6 +157,10 @@ static int bme280_set_sensor_mode(struct bme280 *bme280)
             return res;
         }
         res = i2c_smbus_write_byte_data(bme280->client, BME280_CTRL_MEAS, 0x26);
+        if (res < 0) {
+            return res;
+        }
+	res = i2c_smbus_write_byte_data(bme280->client, BME280_CONFIG, 0x0);
         if (res < 0) {
             return res;
         }
@@ -213,7 +217,7 @@ static int bme280_read(struct bme280 *bme280)
         return res;
     }
     
-    pressure = (data[0] << 12) | (data[0] << 4)  | (data[0] >> 4); 
+    pressure = (data[0] << 12) | (data[1] << 4)  | (data[2] >> 4); 
     temperature = (data[3] << 12) | (data[4] << 4)  | (data[5] >> 4);
     humidity = (data[6] << 8) | data[7];
 
@@ -408,19 +412,6 @@ static int bme280_probe(struct i2c_client *client, const struct i2c_device_id *i
         pr_err("BME280 driver: Mode file creation failed\n"); 
         goto out_remove_temp_hum_press;
     }
-    /*
-    res = i2c_smbus_write_byte_data(bme280->client, 0xE0, 0xB6);
-    if (res < 0){
-	return res;
-    }
-    mdelay(2); 
-    
-    do{
-	res = i2c_smbus_read_byte_data(bme280->client, 0xF3);
-	if (res < 0){
-	    return res;
-	}
-    } while (res & 0x1); // waiting for measuring to be set to 0 */
 
     mutex_init(&bme280->lock);
 
